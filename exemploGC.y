@@ -9,6 +9,7 @@
 %token WHILE,TRUE, FALSE, IF, ELSE
 %token EQ, LEQ, GEQ, NEQ 
 %token AND, OR
+%token INC, DEC, ADDEQ
 
 %right '='
 %left OR
@@ -145,7 +146,15 @@ exp :  NUM   { System.out.println("\tPUSHL $"+$1); }
     |  ID    { System.out.println("\tPUSHL _"+$1); }
     | '(' exp	')' 
     | '!' exp       { gcExpNot(); }
-     
+
+	      /* PRÉ-incremento/decremento: ++a, --a */
+    | INC ID        { gcPreInc($2); }
+    | DEC ID        { gcPreDec($2); }
+
+      /* PÓS-incremento/decremento: a++, a-- */
+    | ID INC        { gcPosInc($1); }
+    | ID DEC        { gcPosDec($1); }
+    | ID ADDEQ exp   { gcAtribAdd($1); }
 	| exp '+' exp		{ gcExpArit('+'); }
 	| exp '-' exp		{ gcExpArit('-'); }
 	| exp '*' exp		{ gcExpArit('*'); }
@@ -258,6 +267,48 @@ exp :  NUM   { System.out.println("\tPUSHL $"+$1); }
             System.out.println("\tMOVL %EDX, _" + id);   // grava na variavel
             System.out.println("\tPUSHL %EDX");          // reempilha valor atribuido
         }
+
+		            /* >>> NOVOS: pre/pós incremento/decremento <<< */
+
+    // ++a  -> incrementa a, empilha novo valor
+    void gcPreInc(String id) {
+        System.out.println("\tMOVL _" + id + ", %EAX");
+        System.out.println("\tADDL $1, %EAX");
+        System.out.println("\tMOVL %EAX, _" + id);
+        System.out.println("\tPUSHL %EAX");
+    }
+
+    // --a  -> decrementa a, empilha novo valor
+    void gcPreDec(String id) {
+        System.out.println("\tMOVL _" + id + ", %EAX");
+        System.out.println("\tSUBL $1, %EAX");
+        System.out.println("\tMOVL %EAX, _" + id);
+        System.out.println("\tPUSHL %EAX");
+    }
+
+    // a++  -> empilha valor antigo, depois incrementa variável
+    void gcPosInc(String id) {
+        System.out.println("\tPUSHL _" + id);          // valor antigo vira resultado da expressão
+        System.out.println("\tMOVL _" + id + ", %EAX");
+        System.out.println("\tADDL $1, %EAX");
+        System.out.println("\tMOVL %EAX, _" + id);
+    }
+
+    // a--  -> empilha valor antigo, depois decrementa variável
+    void gcPosDec(String id) {
+        System.out.println("\tPUSHL _" + id);          // valor antigo vira resultado da expressão
+        System.out.println("\tMOVL _" + id + ", %EAX");
+        System.out.println("\tSUBL $1, %EAX");
+        System.out.println("\tMOVL %EAX, _" + id);
+    }
+
+    void gcAtribAdd(String id) {
+    System.out.println("\tPOPL %EDX");         // RHS
+    System.out.println("\tMOVL _" + id + ", %EAX");  // carrega LHS
+    System.out.println("\tADDL %EDX, %EAX");   // soma
+    System.out.println("\tMOVL %EAX, _" + id); // grava em id
+    System.out.println("\tPUSHL %EAX");        // reempilha resultado
+}
 
 	public void gcExpRel(int oprel) {
 
