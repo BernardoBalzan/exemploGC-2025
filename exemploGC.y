@@ -1,4 +1,3 @@
-	
 %{
   import java.io.*;
   import java.util.ArrayList;
@@ -33,12 +32,17 @@ mainF : VOID MAIN '(' ')'   { System.out.println("_start:"); }
         '{' lcmd  { geraFinal(); } '}'
          ; 
 
-dList : decl dList | ;
+dList : decl dList 
+      | 
+      ;
 
-decl : type ID ';' {  TS_entry nodo = ts.pesquisa($2);
-    	                if (nodo != null) 
-                            yyerror("(sem) variavel >" + $2 + "< jah declarada");
-                        else ts.insert(new TS_entry($2, $1)); }
+decl : type ID ';' {  
+                      TS_entry nodo = ts.pesquisa($2);
+    	              if (nodo != null) 
+                          yyerror("(sem) variavel >" + $2 + "< jah declarada");
+                      else 
+                          ts.insert(new TS_entry($2, $1)); 
+                   }
       ;
 
 type : INT    { $$ = INT; }
@@ -50,27 +54,31 @@ lcmd : lcmd cmd
 	   |
 	   ;
 	   
-cmd :  ID '=' exp	';' {  System.out.println("\tPOPL %EDX");
-  						   System.out.println("\tMOVL %EDX, _"+$1);
-					     }
-			| '{' lcmd '}' { System.out.println("\t\t# terminou o bloco..."); }
+
+/* 
+ * AGORA: comando = expressao seguida de ';'
+ * (inclusive atribuicao, pois '=' entrou em exp)
+ */
+cmd :  exp ';'
+    | '{' lcmd '}' { System.out.println("\t\t# terminou o bloco..."); }
 					     
-					       
-      | WRITE '(' LIT ')' ';' { strTab.add($3);
+    | WRITE '(' LIT ')' ';' { 
+                                strTab.add($3);
                                 System.out.println("\tMOVL $_str_"+strCount+"Len, %EDX"); 
 				System.out.println("\tMOVL $_str_"+strCount+", %ECX"); 
                                 System.out.println("\tCALL _writeLit"); 
 				System.out.println("\tCALL _writeln"); 
                                 strCount++;
-				}
+			     }
       
-	  | WRITE '(' LIT 
-                              { strTab.add($3);
+    | WRITE '(' LIT 
+                              { 
+                                strTab.add($3);
                                 System.out.println("\tMOVL $_str_"+strCount+"Len, %EDX"); 
 				System.out.println("\tMOVL $_str_"+strCount+", %ECX"); 
                                 System.out.println("\tCALL _writeLit"); 
 				strCount++;
-				}
+			      }
 
                     ',' exp ')' ';' 
 			{ 
@@ -79,14 +87,13 @@ cmd :  ID '=' exp	';' {  System.out.println("\tPOPL %EDX");
 			 System.out.println("\tCALL _writeln"); 
                         }
          
-     | READ '(' ID ')' ';'								
-								{
-									System.out.println("\tPUSHL $_"+$3);
-									System.out.println("\tCALL _read");
-									System.out.println("\tPOPL %EDX");
-									System.out.println("\tMOVL %EAX, (%EDX)");
-									
-								}
+    | READ '(' ID ')' ';'								
+		{
+			System.out.println("\tPUSHL $_"+$3);
+			System.out.println("\tCALL _read");
+			System.out.println("\tPOPL %EDX");
+			System.out.println("\tMOVL %EAX, (%EDX)");
+		}
          
     | WHILE {
 					pRot.push(proxRot);  proxRot += 2;
@@ -103,59 +110,60 @@ cmd :  ID '=' exp	';' {  System.out.println("\tPOPL %EDX");
 							pRot.pop();
 							}  
 							
-			| IF '(' exp {	
-											pRot.push(proxRot);  proxRot += 2;
+    | IF '(' exp {	
+						pRot.push(proxRot);  proxRot += 2;
 															
-											System.out.println("\tPOPL %EAX");
-											System.out.println("\tCMPL $0, %EAX");
-											System.out.printf("\tJE rot_%02d\n", pRot.peek());
-										}
-								')' cmd 
+						System.out.println("\tPOPL %EAX");
+						System.out.println("\tCMPL $0, %EAX");
+						System.out.printf("\tJE rot_%02d\n", pRot.peek());
+				  }
+				')' cmd 
 
              restoIf {
-											System.out.printf("rot_%02d:\n",pRot.peek()+1);
-											pRot.pop();
-										}
+						System.out.printf("rot_%02d:\n",pRot.peek()+1);
+						pRot.pop();
+				  }
      ;
      
      
 restoIf : ELSE  {
-											System.out.printf("\tJMP rot_%02d\n", pRot.peek()+1);
-											System.out.printf("rot_%02d:\n",pRot.peek());
-								
-										} 							
-							cmd  
+			System.out.printf("\tJMP rot_%02d\n", pRot.peek()+1);
+			System.out.printf("rot_%02d:\n",pRot.peek());
+			} 							
+		cmd  
 							
-							
-		| {
-		    System.out.printf("\tJMP rot_%02d\n", pRot.peek()+1);
-				System.out.printf("rot_%02d:\n",pRot.peek());
-				} 
-		;										
+	| {
+	    System.out.printf("\tJMP rot_%02d\n", pRot.peek()+1);
+		System.out.printf("rot_%02d:\n",pRot.peek());
+	  } 
+	;										
 
 
-exp :  NUM  { System.out.println("\tPUSHL $"+$1); } 
+exp :  NUM   { System.out.println("\tPUSHL $"+$1); } 
     |  TRUE  { System.out.println("\tPUSHL $1"); } 
-    |  FALSE  { System.out.println("\tPUSHL $0"); }      
- 		| ID   { System.out.println("\tPUSHL _"+$1); }
+    |  FALSE { System.out.println("\tPUSHL $0"); }      
+    |  ID    { System.out.println("\tPUSHL _"+$1); }
     | '(' exp	')' 
     | '!' exp       { gcExpNot(); }
      
-		| exp '+' exp		{ gcExpArit('+'); }
-		| exp '-' exp		{ gcExpArit('-'); }
-		| exp '*' exp		{ gcExpArit('*'); }
-		| exp '/' exp		{ gcExpArit('/'); }
-		| exp '%' exp		{ gcExpArit('%'); }
+	| exp '+' exp		{ gcExpArit('+'); }
+	| exp '-' exp		{ gcExpArit('-'); }
+	| exp '*' exp		{ gcExpArit('*'); }
+	| exp '/' exp		{ gcExpArit('/'); }
+	| exp '%' exp		{ gcExpArit('%'); }
 																			
-		| exp '>' exp		{ gcExpRel('>'); }
-		| exp '<' exp		{ gcExpRel('<'); }											
-		| exp EQ exp		{ gcExpRel(EQ); }											
-		| exp LEQ exp		{ gcExpRel(LEQ); }											
-		| exp GEQ exp		{ gcExpRel(GEQ); }											
-		| exp NEQ exp		{ gcExpRel(NEQ); }											
+	| exp '>' exp		{ gcExpRel('>'); }
+	| exp '<' exp		{ gcExpRel('<'); }											
+	| exp EQ exp		{ gcExpRel(EQ); }											
+	| exp LEQ exp		{ gcExpRel(LEQ); }											
+	| exp GEQ exp		{ gcExpRel(GEQ); }											
+	| exp NEQ exp		{ gcExpRel(NEQ); }											
 												
-		| exp OR exp		{ gcExpLog(OR); }											
-		| exp AND exp		{ gcExpLog(AND); }											
+	| exp OR exp		{ gcExpLog(OR); }											
+	| exp AND exp		{ gcExpLog(AND); }			
+
+        /* >>> NOVO: atribuicao como expressao <<< */
+    | ID '=' exp          { gcAtrib($1); }
 		
 		;							
 
@@ -222,9 +230,9 @@ exp :  NUM  { System.out.println("\tPUSHL $"+$1); }
   }
 
 							
-		void gcExpArit(int oparit) {
- 				System.out.println("\tPOPL %EBX");
-   			System.out.println("\tPOPL %EAX");
+	void gcExpArit(int oparit) {
+ 		System.out.println("\tPOPL %EBX");
+   		System.out.println("\tPOPL %EAX");
 
    		switch (oparit) {
      		case '+' : System.out.println("\tADDL %EBX, %EAX" ); break;
@@ -242,25 +250,32 @@ exp :  NUM  { System.out.println("\tPUSHL $"+$1); }
            		     break;
     		}
    		System.out.println("\tPUSHL %EAX");
-		}
+	}
+
+        /* >>> NOVO: gerador para atribuicao como expressao <<< */
+        void gcAtrib(String id) {
+            System.out.println("\tPOPL %EDX");           // valor da RHS
+            System.out.println("\tMOVL %EDX, _" + id);   // grava na variavel
+            System.out.println("\tPUSHL %EDX");          // reempilha valor atribuido
+        }
 
 	public void gcExpRel(int oprel) {
 
-    System.out.println("\tPOPL %EAX");
-    System.out.println("\tPOPL %EDX");
-    System.out.println("\tCMPL %EAX, %EDX");
-    System.out.println("\tMOVL $0, %EAX");
+	    System.out.println("\tPOPL %EAX");
+	    System.out.println("\tPOPL %EDX");
+	    System.out.println("\tCMPL %EAX, %EDX");
+	    System.out.println("\tMOVL $0, %EAX");
     
-    switch (oprel) {
-       case '<':  			System.out.println("\tSETL  %AL"); break;
-       case '>':  			System.out.println("\tSETG  %AL"); break;
-       case Parser.EQ:  System.out.println("\tSETE  %AL"); break;
-       case Parser.GEQ: System.out.println("\tSETGE %AL"); break;
-       case Parser.LEQ: System.out.println("\tSETLE %AL"); break;
-       case Parser.NEQ: System.out.println("\tSETNE %AL"); break;
-       }
+	    switch (oprel) {
+	       case '<':  		  System.out.println("\tSETL  %AL"); break;
+	       case '>':  		  System.out.println("\tSETG  %AL"); break;
+	       case Parser.EQ:  System.out.println("\tSETE  %AL"); break;
+	       case Parser.GEQ: System.out.println("\tSETGE %AL"); break;
+	       case Parser.LEQ: System.out.println("\tSETLE %AL"); break;
+	       case Parser.NEQ: System.out.println("\tSETNE %AL"); break;
+	    }
     
-    System.out.println("\tPUSHL %EAX");
+	    System.out.println("\tPUSHL %EAX");
 
 	}
 
@@ -280,16 +295,16 @@ exp :  NUM  { System.out.println("\tPUSHL $"+$1); }
    		switch (oplog) {
     			case Parser.OR:  System.out.println("\tORL  %EDX, %EAX");  break;
     			case Parser.AND: System.out.println("\tANDL  %EDX, %EAX"); break;
-       }
+        }
 
     	System.out.println("\tPUSHL %EAX");
 	}
 
 	public void gcExpNot(){
 
-  	 System.out.println("\tPOPL %EAX" );
- 	   System.out.println("	\tNEGL %EAX" );
-  	 System.out.println("	\tPUSHL %EAX");
+  	    System.out.println("\tPOPL %EAX" );
+ 	    System.out.println("	\tNEGL %EAX" );
+  	    System.out.println("	\tPUSHL %EAX");
 	}
 
    private void geraInicio() {
@@ -399,15 +414,14 @@ exp :  NUM  { System.out.println("\tPUSHL $"+$1); }
 
          System.out.println("#\n# area de literais\n#");
          System.out.println("__msg:");
-	       System.out.println("\t.zero 30");
-	       System.out.println("__fim_msg:");
-	       System.out.println("\t.byte 0");
-	       System.out.println("\n");
+	 System.out.println("\t.zero 30");
+	 System.out.println("__fim_msg:");
+	 System.out.println("\t.byte 0");
+	 System.out.println("\n");
 
          for (int i = 0; i<strTab.size(); i++ ) {
              System.out.println("_str_"+i+":");
              System.out.println("\t .ascii \""+strTab.get(i)+"\""); 
-	           System.out.println("_str_"+i+"Len = . - _str_"+i);  
-	      }		
+	     System.out.println("_str_"+i+"Len = . - _str_"+i);  
+	 }		
    }
-   
