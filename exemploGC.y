@@ -7,6 +7,7 @@
 
 %token ID, INT, FLOAT, BOOL, NUM, LIT, VOID, MAIN, READ, WRITE, IF, ELSE
 %token WHILE,TRUE, FALSE, IF, ELSE
+%token DO
 %token EQ, LEQ, GEQ, NEQ 
 %token AND, OR
 %token INC, DEC, ADDEQ
@@ -96,7 +97,22 @@ cmd :  exp ';'
 			System.out.println("\tPOPL %EDX");
 			System.out.println("\tMOVL %EAX, (%EDX)");
 		}
-         
+
+    | DO 
+        {
+            pRot.push(proxRot); 
+            System.out.printf("rot_%02d:\n", pRot.peek()); 
+            proxRot++;
+        }
+      cmd
+      WHILE '(' exp ')' ';'
+        {
+            System.out.println("\tPOPL %EAX   # do-while testa no final");
+            System.out.println("\tCMPL $0, %EAX");
+            System.out.printf ("\tJNE rot_%02d\n", pRot.peek());
+            pRot.pop();
+        }
+
     | WHILE {
 					pRot.push(proxRot);  proxRot += 2;
 					System.out.printf("rot_%02d:\n",pRot.peek());
