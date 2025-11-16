@@ -12,6 +12,7 @@
 %token INC, DEC, ADDEQ
 
 %right '='
+%right '?' ':'        /* condicional ternário */
 %left OR
 %left AND
 %left  '>' '<' EQ LEQ GEQ NEQ
@@ -171,7 +172,10 @@ exp :  NUM   { System.out.println("\tPUSHL $"+$1); }
 	| exp OR exp		{ gcExpLog(OR); }											
 	| exp AND exp		{ gcExpLog(AND); }			
 
-        /* >>> NOVO: atribuicao como expressao <<< */
+	/* condicional ternário: cond ? exp1 : exp2 */
+	| exp '?' exp ':' exp { gcTernario(); }
+
+    /* >>> NOVO: atribuicao como expressao <<< */
     | ID '=' exp          { gcAtrib($1); }
 		
 		;							
@@ -309,6 +313,25 @@ exp :  NUM   { System.out.println("\tPUSHL $"+$1); }
     System.out.println("\tMOVL %EAX, _" + id); // grava em id
     System.out.println("\tPUSHL %EAX");        // reempilha resultado
 }
+
+    /* >>> NOVO: operador condicional ternário (cond ? e1 : e2) <<< */
+    void gcTernario() {
+        int rFalse = proxRot++;
+        int rEnd   = proxRot++;
+
+        // pilha (topo -> base): e2, e1, cond
+        System.out.println("\tPOPL %EAX   # expr_falsa");
+        System.out.println("\tPOPL %EBX   # expr_verdadeira");
+        System.out.println("\tPOPL %ECX   # condicao");
+        System.out.println("\tCMPL $0, %ECX");
+        System.out.printf ("\tJE rot_%02d\n", rFalse);
+        System.out.println("\tMOVL %EBX, %EAX");              // cond != 0 -> resultado = verdadeira
+        System.out.printf ("\tJMP rot_%02d\n", rEnd);
+        System.out.printf("rot_%02d:\n", rFalse);             // cond == 0 -> fica com falsa em %EAX
+        System.out.printf("rot_%02d:\n", rEnd);
+        System.out.println("\tPUSHL %EAX");                   // empilha resultado da expressão
+    }
+
 
 	public void gcExpRel(int oprel) {
 
