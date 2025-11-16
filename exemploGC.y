@@ -11,6 +11,7 @@
 %token EQ, LEQ, GEQ, NEQ 
 %token AND, OR
 %token INC, DEC, ADDEQ
+%token BREAK, CONTINUE
 
 %right '='
 %right '?' ':'        /* condicional ternário */
@@ -97,36 +98,62 @@ cmd :  exp ';'
 			System.out.println("\tPOPL %EDX");
 			System.out.println("\tMOVL %EAX, (%EDX)");
 		}
+	
+	    | BREAK ';'
+          {
+            if (pBreak.empty())
+                yyerror("(sem) comando 'break' fora de laco");
+            else
+                System.out.printf("\tJMP rot_%02d   # break\n", pBreak.peek());
+          }
+    | CONTINUE ';'
+          {
+            if (pContinue.empty())
+                yyerror("(sem) comando 'continue' fora de laco");
+            else
+                System.out.printf("\tJMP rot_%02d   # continue\n", pContinue.peek());
+          }
 
-    | DO 
-        {
-            pRot.push(proxRot); 
-            System.out.printf("rot_%02d:\n", pRot.peek()); 
-            proxRot++;
-        }
+
+        | DO {
+            pRot.push(proxRot);                 // rotulo de início do do-while
+            pContinue.push(pRot.peek());        // continue -> volta para o início (antes do corpo)
+            pBreak.push(pRot.peek()+1);         // break -> vai para o fim
+            System.out.printf("rot_%02d:\n", pRot.peek());
+            proxRot += 2;                       // reserva rot_fim = inicio+1
+          }
       cmd
       WHILE '(' exp ')' ';'
-        {
+          {
             System.out.println("\tPOPL %EAX   # do-while testa no final");
             System.out.println("\tCMPL $0, %EAX");
             System.out.printf ("\tJNE rot_%02d\n", pRot.peek());
+            System.out.printf("rot_%02d:\n", (int)pRot.peek()+1);
             pRot.pop();
-        }
+            pContinue.pop();
+            pBreak.pop();
+          }
 
-    | WHILE {
-					pRot.push(proxRot);  proxRot += 2;
-					System.out.printf("rot_%02d:\n",pRot.peek());
-				  } 
-			 '(' exp ')' {
-			 							System.out.println("\tPOPL %EAX   # desvia se falso...");
-											System.out.println("\tCMPL $0, %EAX");
-											System.out.printf("\tJE rot_%02d\n", (int)pRot.peek()+1);
-										} 
-				cmd		{
-				  		System.out.printf("\tJMP rot_%02d   # terminou cmd na linha de cima\n", pRot.peek());
-							System.out.printf("rot_%02d:\n",(int)pRot.peek()+1);
-							pRot.pop();
-							}  
+
+        | WHILE {
+                    pRot.push(proxRot);         // rotulo de início do while
+                    proxRot += 2;               // reserva também o rotulo de fim (inicio+1)
+                    pContinue.push(pRot.peek());        // continue -> volta para o início (reavalia cond)
+                    pBreak.push(pRot.peek()+1);         // break -> salta para o fim
+                    System.out.printf("rot_%02d:\n", pRot.peek());
+              } 
+              '(' exp ')' {
+                    System.out.println("\tPOPL %EAX   # desvia se falso...");
+                    System.out.println("\tCMPL $0, %EAX");
+                    System.out.printf("\tJE rot_%02d\n", (int)pRot.peek()+1);
+              } 
+              cmd {
+                    System.out.printf("\tJMP rot_%02d   # terminou cmd na linha de cima\n", pRot.peek());
+                    System.out.printf("rot_%02d:\n", (int)pRot.peek()+1);
+                    pRot.pop();
+                    pContinue.pop();
+                    pBreak.pop();
+              }  
 							
     | IF '(' exp {	
 						pRot.push(proxRot);  proxRot += 2;
@@ -209,6 +236,8 @@ exp :  NUM   { System.out.println("\tPUSHL $"+$1); }
   private Stack<Integer> pRot = new Stack<Integer>();
   private int proxRot = 1;
 
+  private Stack<Integer> pBreak = new Stack<Integer>();
+  private Stack<Integer> pContinue = new Stack<Integer>();
 
   public static int ARRAY = 100;
 
