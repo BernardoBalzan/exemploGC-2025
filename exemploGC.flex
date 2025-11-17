@@ -69,7 +69,7 @@ NL  = \n | \r | \r\n
 "&&"   { return Parser.AND; }
 "||"   {  return Parser.OR; }
 
-"struct"   { return Parser.STRUCT; }
+"struct" | "STRUCT" | "Struct"   { return Parser.STRUCT; }
 do     { return Parser.DO; }
 int    { return Parser.INT;     }
 float  { return Parser.FLOAT;   }

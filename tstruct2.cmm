@@ -1,0 +1,15 @@
+struct Pessoa {
+  int idade;
+  int peso;
+  int notas[3];
+};
+
+struct Pessoa p;
+
+void main() {
+  p.idade = 25;
+  p.peso  = 80;
+
+  write("idade = ", p.idade);
+  write("peso  = ", p.peso);
+}

@@ -82,10 +82,26 @@ structCampo :
         structEmConstrucao.tamanho += tamCampo;
       }
     }
+      | type ID '[' NUM ']' ';'
+    {
+      if (structEmConstrucao == null) {
+        yyerror("(int) campo struct fora de contexto");
+      } else {
+        int n = Integer.parseInt($4);
+        int tamCampo = n * 4;  // n elementos * 4 bytes (int)
+
+        CampoStruct c = new CampoStruct($2, $1, structEmConstrucao.tamanho);
+        // se quiser, você pode depois estender CampoStruct para guardar nElem
+
+        structEmConstrucao.campos.add(c);
+        structEmConstrucao.tamanho += tamCampo;
+      }
+    }
 ;
 
 
 decl :
+    /* int x; */
     type ID ';'
     {
       TS_entry nodo = ts.pesquisa($2);
@@ -94,6 +110,24 @@ decl :
       else
         ts.insert(new TS_entry($2, $1));
     }
+
+  /* int v[4];  -- array de inteiros */
+  | type ID '[' NUM ']' ';'
+    {
+      TS_entry nodo = ts.pesquisa($2);
+      if (nodo != null)
+        yyerror("(sem) variavel >" + $2 + "< jah declarada");
+      else {
+        int n = Integer.parseInt($4);
+
+        // tipo ARRAY simbólico, nElem = n, tipoBase = $1 (INT/FLOAT/BOOL)
+        TS_entry novo = new TS_entry($2, ARRAY, n, $1);
+        // o construtor da TS_entry já faz tam = n * 4
+        ts.insert(novo);
+      }
+    }
+
+  /* STRUCT Pessoa p;  -- variável struct */
   | STRUCT ID ID ';'
     {
       TipoStruct tsDef = procuraStruct($2);
@@ -104,17 +138,39 @@ decl :
         if (nodo != null) {
           yyerror("(sem) variavel >" + $3 + "< jah declarada");
         } else {
-          TS_entry novo = new TS_entry($3, INT); // tipo base simbólico
-          novo.setTam(tsDef.tamanho);           // <<< ver passo 3 (TS_entry)
+          TS_entry novo = new TS_entry($3, INT); // tipo "dummy"
+          novo.setTam(tsDef.tamanho);
           ts.insert(novo);
 
-          // mapeia: variável p -> tipo "Pessoa"
+          // mapeia: p -> "Pessoa"
           tipoDaVarStruct.put($3, $2);
         }
       }
     }
-;
 
+  /* STRUCT Pessoa vet[2];  -- array de structs */
+  | STRUCT ID ID '[' NUM ']' ';'
+    {
+      TipoStruct tsDef = procuraStruct($2);
+      if (tsDef == null) {
+        yyerror("(sem) struct >" + $2 + "< nao declarada");
+      } else {
+        TS_entry nodo = ts.pesquisa($3);
+        if (nodo != null) {
+          yyerror("(sem) variavel >" + $3 + "< jah declarada");
+        } else {
+          int n = Integer.parseInt($5);
+
+          TS_entry novo = new TS_entry($3, ARRAY, n, INT);
+          novo.setTam(n * tsDef.tamanho);
+          ts.insert(novo);
+
+          // vet -> "Pessoa"
+          tipoDaVarStruct.put($3, $2);
+        }
+      }
+    }
+  ;
 
 type : INT    { $$ = INT; }
      | FLOAT  { $$ = FLOAT; }
@@ -289,6 +345,12 @@ cmd :  exp ';'
       {
         gcAtribField($1, $3);
       }
+
+        /* atribuicao em array de int: v[exp] = exp; */
+    | ID '[' exp ']' '=' exp ';'
+      {
+        gcAtribArray($1);
+      }
     ;
      
 restoIf 
@@ -374,6 +436,9 @@ exp :  NUM
 
     |  ID DOT ID
         { gcLoadField($1, $3); }
+
+    | ID '[' exp ']'
+        { gcLoadArrayElem($1); }
 
     | '(' exp	')' 
 
@@ -561,6 +626,24 @@ exp :  NUM
       System.out.println("\n\tFormato: java Parser entrada.cmm >entrada.s\n");
     }
 
+  }
+
+    // --- ARRAYS DE INTEIROS ---
+
+  // Carrega v[i] (int): exp => ID '[' exp ']'
+  void gcLoadArrayElem(String id) {
+    // pilha: ... idx
+    System.out.println("\tPOPL %ECX");               // idx
+    System.out.println("\tMOVL _" + id + "(,%ECX,4), %EAX");
+    System.out.println("\tPUSHL %EAX");
+  }
+
+  // Atribui v[i] = valor: cmd => ID '[' exp ']' '=' exp ';'
+  void gcAtribArray(String id) {
+    // pilha: ... idx, valor
+    System.out.println("\tPOPL %EAX");               // valor
+    System.out.println("\tPOPL %ECX");               // idx
+    System.out.println("\tMOVL %EAX, _" + id + "(,%ECX,4)");
   }
 
   // Carrega o valor de um campo: p.idade
