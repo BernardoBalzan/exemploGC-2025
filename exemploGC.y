@@ -2,6 +2,7 @@
   import java.io.*;
   import java.util.ArrayList;
   import java.util.Stack;
+  import java.util.HashMap;
 %}
  
 
@@ -13,6 +14,8 @@
 %token AND, OR
 %token INC, DEC, ADDEQ
 %token BREAK, CONTINUE
+%token STRUCT
+%token DOT
 
 %right '='
 %right '?' ':'        /* condicional ternário */
@@ -37,19 +40,81 @@ mainF : VOID MAIN '(' ')'   { System.out.println("_start:"); }
         '{' lcmd  { geraFinal(); } '}'
       ; 
 
-dList : decl dList 
-      | 
-      ;
+dList :
+      decl dList
+    | structDecl dList
+    | /* vazio */
+    ;
 
-decl : type ID ';' 
-      {  
-        TS_entry nodo = ts.pesquisa($2);
-        if (nodo != null) 
-            yyerror("(sem) variavel >" + $2 + "< jah declarada");
-        else 
-            ts.insert(new TS_entry($2, $1)); 
+structDecl :
+    STRUCT ID '{'
+      {
+        if (procuraStruct($2) != null) {
+          yyerror("(sem) struct >" + $2 + "< jah declarada");
+        } else {
+          structEmConstrucao = new TipoStruct($2);
+        }
       }
-      ;
+      structCampos
+      '}' ';'
+      {
+        if (structEmConstrucao != null) {
+          tabStruct.add(structEmConstrucao);
+          structEmConstrucao = null;
+        }
+      }
+;
+
+structCampos :
+      /* vazio */
+    | structCampos structCampo
+    ;
+
+structCampo :
+    type ID ';'
+    {
+      if (structEmConstrucao == null) {
+        yyerror("(int) campo struct fora de contexto");
+      } else {
+        int tamCampo = 4; // 4 bytes por campo (int/bool/etc)
+        CampoStruct c = new CampoStruct($2, $1, structEmConstrucao.tamanho);
+        structEmConstrucao.campos.add(c);
+        structEmConstrucao.tamanho += tamCampo;
+      }
+    }
+;
+
+
+decl :
+    type ID ';'
+    {
+      TS_entry nodo = ts.pesquisa($2);
+      if (nodo != null)
+        yyerror("(sem) variavel >" + $2 + "< jah declarada");
+      else
+        ts.insert(new TS_entry($2, $1));
+    }
+  | STRUCT ID ID ';'
+    {
+      TipoStruct tsDef = procuraStruct($2);
+      if (tsDef == null) {
+        yyerror("(sem) struct >" + $2 + "< nao declarada");
+      } else {
+        TS_entry nodo = ts.pesquisa($3);
+        if (nodo != null) {
+          yyerror("(sem) variavel >" + $3 + "< jah declarada");
+        } else {
+          TS_entry novo = new TS_entry($3, INT); // tipo base simbólico
+          novo.setTam(tsDef.tamanho);           // <<< ver passo 3 (TS_entry)
+          ts.insert(novo);
+
+          // mapeia: variável p -> tipo "Pessoa"
+          tipoDaVarStruct.put($3, $2);
+        }
+      }
+    }
+;
+
 
 type : INT    { $$ = INT; }
      | FLOAT  { $$ = FLOAT; }
@@ -219,6 +284,11 @@ cmd :  exp ';'
         pContinue.pop();
       }
 
+      /* atribuição a campo de struct: p.idade = exp; */
+    | ID DOT ID '=' exp ';'
+      {
+        gcAtribField($1, $3);
+      }
     ;
      
 restoIf 
@@ -301,6 +371,9 @@ exp :  NUM
 
     |  ID    
         { System.out.println("\tPUSHL _"+$1); }
+
+    |  ID DOT ID
+        { gcLoadField($1, $3); }
 
     | '(' exp	')' 
 
@@ -395,6 +468,55 @@ exp :  NUM
 
   public static int ARRAY = 100;
 
+    // --------- SUPORTE A STRUCT ---------
+
+  // mapeia: nomeVariavelStruct -> nomeTipoStruct
+  private HashMap<String,String> tipoDaVarStruct = new HashMap<String,String>();
+
+  // descritor de campo dentro de uma struct
+  class CampoStruct {
+    String nome;
+    int    tipo;   // usa INT, FLOAT, BOOL, etc.
+    int    offset; // deslocamento em bytes dentro da struct
+
+    CampoStruct(String n, int t, int o) {
+      nome = n;
+      tipo = t;
+      offset = o;
+    }
+  }
+
+  // descritor de um tipo struct
+  class TipoStruct {
+    String nome;
+    ArrayList<CampoStruct> campos = new ArrayList<CampoStruct>();
+    int tamanho; // em bytes
+
+    TipoStruct(String n) {
+      nome = n;
+      tamanho = 0;
+    }
+  }
+
+  // tabela global de tipos struct
+  private ArrayList<TipoStruct> tabStruct = new ArrayList<TipoStruct>();
+
+  // struct atualmente sendo construída em structDecl
+  private TipoStruct structEmConstrucao = null;
+
+  private TipoStruct procuraStruct(String nome) {
+    for (TipoStruct ts : tabStruct) {
+      if (ts.nome.equals(nome)) return ts;
+    }
+    return null;
+  }
+
+  private CampoStruct procuraCampo(TipoStruct ts, String campo) {
+    for (CampoStruct c : ts.campos) {
+      if (c.nome.equals(campo)) return c;
+    }
+    return null;
+  }
 
   private int yylex () {
     int yyl_return = -1;
@@ -439,6 +561,62 @@ exp :  NUM
       System.out.println("\n\tFormato: java Parser entrada.cmm >entrada.s\n");
     }
 
+  }
+
+  // Carrega o valor de um campo: p.idade
+  void gcLoadField(String idVar, String idCampo) {
+    String nomeStruct = tipoDaVarStruct.get(idVar);
+    if (nomeStruct == null) {
+      yyerror("(sem) variavel struct >" + idVar + "< nao tem tipo struct associado");
+      return;
+    }
+
+    TipoStruct tsDef = procuraStruct(nomeStruct);
+    if (tsDef == null) {
+      yyerror("(sem) tipo struct >" + nomeStruct + "< nao encontrado");
+      return;
+    }
+
+    CampoStruct campo = procuraCampo(tsDef, idCampo);
+    if (campo == null) {
+      yyerror("(sem) campo >" + idCampo + "< nao existe em struct " + nomeStruct);
+      return;
+    }
+
+    int off = campo.offset;
+
+    // gera: MOVL _idVar + off, %EAX; PUSHL %EAX
+    System.out.println("\tMOVL _" + idVar + " + " + off + ", %EAX");
+    System.out.println("\tPUSHL %EAX");
+  }
+
+  // Atribui a um campo: p.idade = <topo da pilha>
+  void gcAtribField(String idVar, String idCampo) {
+    String nomeStruct = tipoDaVarStruct.get(idVar);
+    if (nomeStruct == null) {
+      yyerror("(sem) variavel struct >" + idVar + "< nao tem tipo struct associado");
+      return;
+    }
+
+    TipoStruct tsDef = procuraStruct(nomeStruct);
+    if (tsDef == null) {
+      yyerror("(sem) tipo struct >" + nomeStruct + "< nao encontrado");
+      return;
+    }
+
+    CampoStruct campo = procuraCampo(tsDef, idCampo);
+    if (campo == null) {
+      yyerror("(sem) campo >" + idCampo + "< nao existe em struct " + nomeStruct);
+      return;
+    }
+
+    int off = campo.offset;
+
+    // pilha: ... valor
+    System.out.println("\tPOPL %EAX");
+    System.out.println("\tMOVL %EAX, _" + idVar + " + " + off);
+    // se quiser que a expressão tenha valor, poderia:
+    // System.out.println("\tPUSHL %EAX");
   }
 
   void gcExpArit(int oparit) {

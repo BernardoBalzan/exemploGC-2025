@@ -33,13 +33,11 @@ public class TabSimb
     }
 
 	public void geraGlobais() {
-          // assume que todas variáveis são globais e inteiras.
-	      for (TS_entry nodo : lista) {
-	            	System.out.println("_"+nodo.getId()+":"+"	.zero 4");
-	            }
-	      }
-	     
-
+    for (TS_entry nodo : lista) {
+        int tam = nodo.getTam();           // tamanho em bytes da variável
+        System.out.println("_" + nodo.getId() + ":\t.zero " + tam);
+    }
+}  
 
 }
 
