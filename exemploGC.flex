@@ -84,6 +84,7 @@ true   { return Parser.TRUE; }
 false   { return Parser.FALSE; }
 break   { return Parser.BREAK; }
 continue { return Parser.CONTINUE; }
+for    { return Parser.FOR; }
 
 
 
